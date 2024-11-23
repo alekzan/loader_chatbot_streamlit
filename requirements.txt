@@ -57,3 +57,4 @@ langchain-pinecone
 pinecone-notebooks
 pinecone-client
 pinecone
+langchain_pinecone
