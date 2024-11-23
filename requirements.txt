@@ -56,3 +56,4 @@ duckdb
 langchain-pinecone
 pinecone-notebooks
 pinecone-client
+pinecone
