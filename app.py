@@ -7,6 +7,7 @@ from typing import Optional
 
 from langchain_groq import ChatGroq
 from langchain_chroma import Chroma
+from chromadb.config import Settings
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
@@ -60,6 +61,12 @@ llm = ChatOpenAI(model=gpt, temperature=0.2)
 # llama_3_2 = "llama-3.2-90b-vision-preview"
 # llm = ChatGroq(model=llama_3_2, temperature=0.2)
 
+persist_directory = "./data/chroma_langchain_db"
+settings = Settings(
+    chroma_db_impl="duckdb+parquet",
+    persist_directory=persist_directory,
+)
+
 
 # Function to process documents and get retriever
 def process_docs_and_get_retriever(
@@ -99,6 +106,7 @@ def process_docs_and_get_retriever(
             persist_directory=persist_directory,
             embedding_function=embeddings,
             collection_name=collection_name,
+            client_settings=settings,
         )
         vector_store.add_documents(splits)
     else:
@@ -107,6 +115,7 @@ def process_docs_and_get_retriever(
             embedding=embeddings,
             persist_directory=persist_directory,
             collection_name=collection_name,
+            client_settings=settings,
         )
 
     return "All Data added"
