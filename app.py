@@ -11,7 +11,7 @@ from langchain.chat_models import ChatOpenAI
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import HumanMessage, SystemMessage, AIMessage
 from langchain.document_loaders import PyPDFLoader, Docx2txtLoader
-from langchain.agents import create_retriever_tool
+from langchain.tools.retriever import create_retriever_tool
 
 # from langchain.vectorstores import Pinecone
 from pinecone import Pinecone, ServerlessSpec
