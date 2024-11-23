@@ -6,15 +6,17 @@ import streamlit as st
 from typing import Optional
 
 import pinecone
-from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain_openai import OpenAIEmbeddings
+
 from langchain.chat_models import ChatOpenAI
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.schema import HumanMessage, SystemMessage, AIMessage
-from langchain.document_loaders import PyPDFLoader, Docx2txtLoader
+from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain.tools.retriever import create_retriever_tool
 
 # from langchain.vectorstores import Pinecone
 from pinecone import Pinecone, ServerlessSpec
+from langchain_pinecone import PineconeVectorStore
 
 from langgraph.graph import StateGraph, MessagesState
 from langgraph.prebuilt import tools_condition, ToolNode
@@ -34,14 +36,12 @@ else:
         "OPENAI_API_KEY not found. Please set it in your environment or .env file."
     )
 
-pinecone_api_key = os.getenv("PINECONE_API_KEY")
-pinecone_environment = os.getenv("PINECONE_ENVIRONMENT")
-if pinecone_api_key and pinecone_environment:
-    pinecone.init(api_key=pinecone_api_key, environment=pinecone_environment)
-else:
-    st.error(
-        "PINECONE_API_KEY or PINECONE_ENVIRONMENT not found. Please set them in your environment or .env file."
-    )
+# pinecone_api_key = os.getenv("PINECONE_API_KEY")
+# pinecone_environment = os.getenv("PINECONE_ENVIRONMENT")
+
+pinecone_api_key = os.environ.get("PINECONE_API_KEY")
+pc = Pinecone(api_key=pinecone_api_key)
+
 
 langchain_api_key = os.getenv("LANGCHAIN_API_KEY")
 if langchain_api_key:
