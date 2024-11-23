@@ -56,4 +56,5 @@ duckdb
 pinecone-notebooks
 pinecone-client
 pinecone
-langchain_pinecone
+pinecone-datasets==0.7.0
+langchain-pinecone==0.1.2

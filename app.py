@@ -14,9 +14,9 @@ from langchain.schema import HumanMessage, SystemMessage, AIMessage
 from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 from langchain.tools.retriever import create_retriever_tool
 
-# from langchain.vectorstores import Pinecone
 from pinecone import Pinecone, ServerlessSpec
 from langchain_pinecone import PineconeVectorStore
+import pinecone_datasets
 
 from langgraph.graph import StateGraph, MessagesState
 from langgraph.prebuilt import tools_condition, ToolNode
@@ -27,21 +27,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Set environment variables
-openai_api_key = os.getenv("OPENAI_API_KEY")
-if openai_api_key:
-    os.environ["OPENAI_API_KEY"] = openai_api_key
-else:
-    st.error(
-        "OPENAI_API_KEY not found. Please set it in your environment or .env file."
-    )
+# Access API keys from Streamlit secrets
+openai_api_key = st.secrets.get("OPENAI_API_KEY")
+pinecone_api_key = st.secrets.get("PINECONE_API_KEY")
 
-# pinecone_api_key = os.getenv("PINECONE_API_KEY")
-# pinecone_environment = os.getenv("PINECONE_ENVIRONMENT")
+if not openai_api_key:
+    st.error("OPENAI_API_KEY not found. Please set it in your Streamlit secrets.")
+if not pinecone_api_key:
+    st.error("PINECONE_API_KEY not found. Please set it in your Streamlit secrets.")
 
-pinecone_api_key = os.environ.get("PINECONE_API_KEY")
-pc = Pinecone(api_key=pinecone_api_key)
-
+os.environ["OPENAI_API_KEY"] = openai_api_key
+os.environ["PINECONE_API_KEY"] = pinecone_api_key
 
 langchain_api_key = os.getenv("LANGCHAIN_API_KEY")
 if langchain_api_key:
@@ -61,13 +57,13 @@ gpt = "gpt-4o-mini"
 llm = ChatOpenAI(model=gpt, temperature=0.2)
 
 # Define index name
-index_name = "user-data"
+index_name = "goldmine-amazon"
 
 
 # Function to process documents and get retriever
 def process_docs_and_get_retriever(
     doc_path: str,
-    index_name: str = "user-data",
+    index_name: str = "goldmine-amazon",
     k: int = 4,
 ):
     if doc_path.endswith(".pdf"):
@@ -95,8 +91,6 @@ def process_docs_and_get_retriever(
     )
     splits = text_splitter.split_documents(docs)
 
-    embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
-
     # Check if the index exists
     if index_name not in pinecone.list_indexes():
         # Create index
@@ -105,7 +99,7 @@ def process_docs_and_get_retriever(
     index = pinecone.Index(index_name)
 
     # Create vector store
-    vector_store = Pinecone(index, embeddings.embed_query, embeddings)
+    vector_store = PineconeVectorStore(index, embeddings.embed_query, embeddings)
 
     # Add documents to vector store
     vector_store.add_documents(splits)
