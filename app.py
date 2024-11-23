@@ -5,15 +5,16 @@ import uuid
 import streamlit as st
 from typing import Optional
 
-from langchain_groq import ChatGroq
-from langchain_chroma import Chroma
-from chromadb.config import Settings
-from langchain_openai import OpenAIEmbeddings, ChatOpenAI
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
-from langchain_core.documents import Document
-from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
-from langchain.tools.retriever import create_retriever_tool
+import pinecone
+from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain.chat_models import ChatOpenAI
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.schema import HumanMessage, SystemMessage, AIMessage
+from langchain.document_loaders import PyPDFLoader, Docx2txtLoader
+from langchain.agents import create_retriever_tool
+
+# from langchain.vectorstores import Pinecone
+from pinecone import Pinecone, ServerlessSpec
 
 from langgraph.graph import StateGraph, MessagesState
 from langgraph.prebuilt import tools_condition, ToolNode
@@ -33,13 +34,14 @@ else:
         "OPENAI_API_KEY not found. Please set it in your environment or .env file."
     )
 
-groq_api_key = os.getenv("GROQ_API_KEY")
-if groq_api_key:
-    os.environ["GROQ_API_KEY"] = groq_api_key
-    use_chat_groq = True
+pinecone_api_key = os.getenv("PINECONE_API_KEY")
+pinecone_environment = os.getenv("PINECONE_ENVIRONMENT")
+if pinecone_api_key and pinecone_environment:
+    pinecone.init(api_key=pinecone_api_key, environment=pinecone_environment)
 else:
-    use_chat_groq = False
-    # If you're not using ChatGroq, you can ignore this variable or set it accordingly
+    st.error(
+        "PINECONE_API_KEY or PINECONE_ENVIRONMENT not found. Please set them in your environment or .env file."
+    )
 
 langchain_api_key = os.getenv("LANGCHAIN_API_KEY")
 if langchain_api_key:
@@ -57,22 +59,15 @@ os.environ["LANGCHAIN_PROJECT"] = "Demo Upwork"
 embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 gpt = "gpt-4o-mini"
 llm = ChatOpenAI(model=gpt, temperature=0.2)
-# Uncomment the following lines if you have access to ChatGroq and want to use it
-# llama_3_2 = "llama-3.2-90b-vision-preview"
-# llm = ChatGroq(model=llama_3_2, temperature=0.2)
 
-persist_directory = "./data/chroma_langchain_db"
-settings = Settings(
-    chroma_db_impl="duckdb+parquet",
-    persist_directory=persist_directory,
-)
+# Define index name
+index_name = "user-data"
 
 
 # Function to process documents and get retriever
 def process_docs_and_get_retriever(
     doc_path: str,
-    persist_directory="./data/chroma_langchain_db",
-    collection_name: str = "user_data",
+    index_name: str = "user-data",
     k: int = 4,
 ):
     if doc_path.endswith(".pdf"):
@@ -100,54 +95,50 @@ def process_docs_and_get_retriever(
     )
     splits = text_splitter.split_documents(docs)
 
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-    if os.path.exists(persist_directory):
-        vector_store = Chroma(
-            persist_directory=persist_directory,
-            embedding_function=embeddings,
-            collection_name=collection_name,
-            client_settings=settings,
-        )
-        vector_store.add_documents(splits)
-    else:
-        vector_store = Chroma.from_documents(
-            documents=splits,
-            embedding=embeddings,
-            persist_directory=persist_directory,
-            collection_name=collection_name,
-            client_settings=settings,
-        )
+    embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
+
+    # Check if the index exists
+    if index_name not in pinecone.list_indexes():
+        # Create index
+        pinecone.create_index(index_name, dimension=1536)
+    # Connect to index
+    index = pinecone.Index(index_name)
+
+    # Create vector store
+    vector_store = Pinecone(index, embeddings.embed_query, embeddings)
+
+    # Add documents to vector store
+    vector_store.add_documents(splits)
 
     return "All Data added"
 
 
 # Function to recreate retriever
 def recreate_retriever(
-    persist_directory: str = "./data/chroma_langchain_db",
-    collection_name: str = "user_data",
+    index_name: str = "user-data",
+    k: int = 4,
 ):
-    embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-    vector_store = Chroma(
-        persist_directory=persist_directory,
-        embedding_function=embeddings,
-        collection_name=collection_name,
-    )
-    return vector_store.as_retriever(search_kwargs={"k": 4})
+    embeddings = OpenAIEmbeddings(model="text-embedding-ada-002")
+    index = pinecone.Index(index_name)
+    vector_store = Pinecone(index, embeddings.embed_query, embeddings)
+    return vector_store.as_retriever(search_kwargs={"k": k})
 
 
 # Initialize vector store
-chroma_db_path = "./data/chroma_langchain_db"
-if not os.path.exists(chroma_db_path):
+index_name = "user-data"
+
+# Check if the index exists; if not, create it and add initial documents
+if index_name not in pinecone.list_indexes():
     os.makedirs("./data/docs", exist_ok=True)
     doc_path = "./data/docs/goldmine.docx"
-    retriever_doc = process_docs_and_get_retriever(doc_path)
+    retriever_doc = process_docs_and_get_retriever(doc_path, index_name=index_name)
     print("Retriever is ready:", retriever_doc)
 else:
-    print(f"Path already exists: {chroma_db_path}")
+    print(f"Index '{index_name}' already exists.")
 
 # Set up tools and retriever
 tools = []
-retriever = recreate_retriever()
+retriever = recreate_retriever(index_name=index_name)
 retriever_tool = create_retriever_tool(
     retriever,
     "retriever_tool",
@@ -167,7 +158,7 @@ def vector_data(state: State):
     if "doc_path" in state and state["doc_path"]:
         print("\n\n********** ADDING DATA TO VECTOR STORE **********\n\n")
         doc_path = state["doc_path"]
-        process_docs_and_get_retriever(doc_path)
+        process_docs_and_get_retriever(doc_path, index_name=index_name)
         return {
             "doc_path": "",
             "messages": [

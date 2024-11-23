@@ -53,3 +53,5 @@ uvicorn==0.32.1
 yarl==1.18.0
 streamlit
 duckdb
+langchain-pinecone
+pinecone-notebooks
